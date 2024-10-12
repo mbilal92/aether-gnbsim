@@ -1,0 +1,116 @@
+---
+
+- name: "release tarball is generated"
+  local_action:
+    module: shell
+    _raw_params: echo "{{ ansible_env.HOME }} {{inventory_hostname}}"
+    # chdir: "files/clones/webhooks"
+  register: container_info
+  delegate_to: 127.0.0.1
+
+- debug:
+    var: container_info.stdout_lines
+  # when: inventory_hostname in groups['gnbsim_nodes']
+
+- name: create {{ ansible_env.HOME }}/.kube
+  local_action:
+    module: file
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+  # when: inventory_hostname in groups['master_nodes']
+  delegate_to: 127.0.0.1
+  # become: true
+
+- name: Specifying a destination path
+  ansible.builtin.fetch:
+    src: "{{ ansible_env.HOME }}/.kube/config"
+    dest: "/tmp/.kube/config"
+    flat: yes
+  when: inventory_hostname in groups['master_nodes']
+  become: true
+
+- name: "move kube config file to {{ ansible_env.HOME }}/.kube/config on management machine"
+  local_action:
+    module: shell
+    _raw_params: mv /tmp/.kube/config {{ ansible_env.HOME }}/.kube/config
+  when: inventory_hostname in groups['master_nodes']
+  become: true
+
+
+
+# - set_fact:
+#     network_macvlan_name: "{{ gnbsim.docker.network.macvlan.name }}"
+
+# - name: get info on gnbsim containers
+#   community.docker.docker_container_info:
+#     name: "{{ gnbsim.docker.container.prefix }}-{{ (item.0|int)+1 }}"
+#   with_indexed_items: "{{ gnbsim.servers[lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname)] }}"
+#   register: container_info
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
+
+# - name: Remove config file on host
+#   ansible.builtin.file:
+#     path: "/tmp/gnbsim-{{ (item.0|int)+1 }}.yaml"
+#     state: absent
+#   with_indexed_items: "{{ gnbsim.servers[lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname)] }}"
+#   when: inventory_hostname in groups['gnbsim_nodes']
+
+# - name: copy config files to gnbsim host
+#   template:
+#     src: "{{ ROOT_DIR }}/{{ item.1 }}"
+#     dest: /tmp/gnbsim-{{ (item.0|int)+1 }}.yaml
+#   vars:
+#     container_ip: "{{ container_info.results[item.0].container.NetworkSettings.Networks[network_macvlan_name].IPAddress }}"
+#     amf_ip: "{{ core.amf.ip }}"
+#   with_indexed_items: "{{ gnbsim.servers[lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname)] }}"
+#   when: inventory_hostname in groups['gnbsim_nodes']
+
+# - name: copy config files into gnbsim containers
+#   shell: |
+#     docker cp /tmp/gnbsim-{{ (item.0|int)+1 }}.yaml \
+#       gnbsim-{{ (item.0|int)+1 }}:/tmp/gnbsim.yaml
+#   with_indexed_items: "{{ gnbsim.servers[lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname)] }}"
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
+
+# - name: start gnbsim
+#   community.docker.docker_container_exec:
+#     container: "{{ gnbsim.docker.container.prefix }}-{{ (item.0|int)+1 }}"
+#     command: /bin/bash -c "rm -rf /gnbsim/bin/*.log; rm -f /gnbsim/bin/*.config;
+#         /gnbsim/bin/gnbsim --cfg /tmp/gnbsim.yaml 2&> gnbsim{{ (item.0|int)+1 }}-{{ ansible_date_time.iso8601_basic_short }}.log;
+#         cp -f /tmp/gnbsim.yaml ./gnbsim{{ (item.0|int)+1 }}-{{ ansible_date_time.iso8601_basic_short }}.config;"
+#   async: 100
+#   poll: 0
+#   with_indexed_items: "{{ gnbsim.servers[lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname)] }}"
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
+
+# - pause:
+#     seconds: 1
+
+# - name: loop until gnbsim completes
+#   shell: |
+#     ps aux | grep "\-\-cfg\ /tmp/gnbsim" | wc -l
+#   register: async_result
+#   until: async_result.stdout == "0"
+#   retries: 100
+#   delay: 5
+#   when: inventory_hostname in groups['gnbsim_nodes']
+
+# - name: show outupt of summary.log from gnbsim Pod
+#   shell: |
+#     docker exec gnbsim-1 cat summary.log
+#   register: gNbsimPod
+#   when: inventory_hostname in groups['gnbsim_nodes']
+
+# - debug:
+#     var: gNbsimPod.stdout_lines
+#   when: inventory_hostname in groups['gnbsim_nodes']
+
+# - name: force stop gnbsim
+#   shell: |
+#     pkill -9 -f /gnbsim/bin/gnbsim
+#   become: true
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   ignore_errors: yes

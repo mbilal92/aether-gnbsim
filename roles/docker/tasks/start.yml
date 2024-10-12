@@ -1,35 +1,54 @@
 ---
 
-- name: pull {{ gnbsim.docker.container.image }} image
-  community.docker.docker_image:
-    name: "{{ gnbsim.docker.container.image }}"
-    source: pull
+# - name: pull {{ gnbsim.docker.container.image }} image
+#   community.docker.docker_image:
+#     name: "{{ gnbsim.docker.container.image }}"
+#     source: pull
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
+
+- name: find {{ core.data_iface }}'s subnet for RAN
+  shell: ip route | grep {{ core.data_iface }} | awk '/kernel/ {print $1}' | head -1
+  register: result
   when: inventory_hostname in groups['gnbsim_nodes']
   become: true
 
-- name: create macvlan:{{ gnbsim.docker.network.macvlan.name }} network
-  community.docker.docker_network:
-    name: "{{ gnbsim.docker.network.macvlan.name }}"
-    driver: macvlan
-    driver_options:
-      parent: "{{ gnbsim.router.macvlan.iface }}"
-    ipam_config:
-      - subnet: "{{ address_prefix }}.0/24"
-        gateway: "{{ address_prefix }}.1"
-    state: present
-  vars:
-    address_prefix: "{{ gnbsim.router.macvlan.subnet_prefix }}.{{ lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname) }}"
+# TODO: check if interface subnet is valid
+- set_fact:
+    subnet_prefix: "{{ result.stdout if (gnbsim.router.macvlan.subnet_prefix == '') else gnbsim.router.macvlan.subnet_prefix }}"
   when: inventory_hostname in groups['gnbsim_nodes']
-  become: true
 
-- name: create {{ gnbsim.docker.container.image }} containers
-  community.docker.docker_container:
-    name: "{{ gnbsim.docker.container.prefix }}-{{ item }}"
-    image: "{{ gnbsim.docker.container.image }}"
-    network_mode: "{{ gnbsim.docker.network.macvlan.name }}"
-    command: sleep infinity
-    state: started
-  with_sequence: count={{ gnbsim.docker.container.count }}
+- set_fact:
+    subnet_prefix: "{{ subnet_prefix.split('.')[0] }}.{{ subnet_prefix.split('.')[1] }}"
   when: inventory_hostname in groups['gnbsim_nodes']
-  become: true
+
+- debug:
+    var: subnet_prefix
+  when: inventory_hostname in groups['gnbsim_nodes']
+
+# - name: create macvlan:{{ gnbsim.docker.network.macvlan.name }} network
+#   community.docker.docker_network:
+#     name: "{{ gnbsim.docker.network.macvlan.name }}"
+#     driver: macvlan
+#     driver_options:
+#       parent: "{{ gnbsim.router.macvlan.iface }}"
+#     ipam_config:
+#       - subnet: "{{ address_prefix }}.0/24"
+#         gateway: "{{ address_prefix }}.1"
+#     state: present
+#   vars:
+#     address_prefix: "{{ subnet_prefix }}.{{ lookup('ansible.utils.index_of', groups['gnbsim_nodes'], 'eq', inventory_hostname) }}"
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
+
+# - name: create {{ gnbsim.docker.container.image }} containers
+#   community.docker.docker_container:
+#     name: "{{ gnbsim.docker.container.prefix }}-{{ item }}"
+#     image: "{{ gnbsim.docker.container.image }}"
+#     network_mode: "{{ gnbsim.docker.network.macvlan.name }}"
+#     command: sleep infinity
+#     state: started
+#   with_sequence: count={{ gnbsim.docker.container.count }}
+#   when: inventory_hostname in groups['gnbsim_nodes']
+#   become: true
 
